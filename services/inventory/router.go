@@ -11,7 +11,6 @@ import (
 var store = NewInventory()
 
 func init() {
-	// seed
 	store.Create("Толстовка", 100, 19.99)
 	store.Create("Футболка", 50, 7.5)
 }
@@ -19,8 +18,7 @@ func init() {
 func NewRouter() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/items", itemsHandler)
-	mux.HandleFunc("/items/", itemHandler) // for paths with id
-	// enable CORS and logging
+	mux.HandleFunc("/items/", itemHandler)
 	return loggingMiddleware(corsMiddleware(mux))
 }
 
