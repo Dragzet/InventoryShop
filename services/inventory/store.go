@@ -1,8 +1,9 @@
 package main
 
 import (
+	"database/sql"
 	"errors"
-	"sync"
+	_ "github.com/lib/pq"
 )
 
 // Item represents a product in inventory
@@ -13,57 +14,79 @@ type Item struct {
 	Price    float64 `json:"price"`
 }
 
-// Inventory is a simple in-memory store
+// Inventory is a Postgres-backed store
 type Inventory struct {
-	mu     sync.Mutex
-	items  map[int]*Item
-	nextID int
+	db *sql.DB
 }
 
-func NewInventory() *Inventory {
-	return &Inventory{items: make(map[int]*Item), nextID: 1}
+// NewInventory initializes store and ensures table exists
+func NewInventory(db *sql.DB) *Inventory {
+	// create table if not exists
+	_, err := db.Exec(`
+	CREATE TABLE IF NOT EXISTS items (
+		id SERIAL PRIMARY KEY,
+		name TEXT NOT NULL,
+		quantity INT NOT NULL,
+		price NUMERIC NOT NULL
+	)
+	`)
+	if err != nil {
+		panic(err)
+	}
+	return &Inventory{db: db}
 }
 
 func (s *Inventory) List() []*Item {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	res := make([]*Item, 0, len(s.items))
-	for _, v := range s.items {
-		res = append(res, v)
+	rows, err := s.db.Query("SELECT id, name, quantity, price FROM items")
+	if err != nil {
+		return []*Item{}
+	}
+	defer rows.Close()
+	res := make([]*Item, 0)
+	for rows.Next() {
+		var it Item
+		if err := rows.Scan(&it.ID, &it.Name, &it.Quantity, &it.Price); err != nil {
+			continue
+		}
+		res = append(res, &it)
 	}
 	return res
 }
 
 func (s *Inventory) Get(id int) (*Item, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	it, ok := s.items[id]
-	if !ok {
-		return nil, errors.New("not found")
+	var it Item
+	row := s.db.QueryRow("SELECT id, name, quantity, price FROM items WHERE id=$1", id)
+	if err := row.Scan(&it.ID, &it.Name, &it.Quantity, &it.Price); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errors.New("not found")
+		}
+		return nil, err
 	}
-	return it, nil
+	return &it, nil
 }
 
 func (s *Inventory) Create(name string, qty int, price float64) *Item {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	id := s.nextID
-	s.nextID++
-	it := &Item{ID: id, Name: name, Quantity: qty, Price: price}
-	s.items[id] = it
-	return it
+	var id int
+	err := s.db.QueryRow("INSERT INTO items (name, quantity, price) VALUES ($1,$2,$3) RETURNING id", name, qty, price).Scan(&id)
+	if err != nil {
+		panic(err)
+	}
+	return &Item{ID: id, Name: name, Quantity: qty, Price: price}
 }
 
 func (s *Inventory) UpdateQuantity(id, delta int) (*Item, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	it, ok := s.items[id]
-	if !ok {
-		return nil, errors.New("not found")
+	// Try to update only when resulting quantity >= 0 and return the row
+	var it Item
+	row := s.db.QueryRow(`
+	UPDATE items SET quantity = quantity + $1
+	WHERE id = $2 AND (quantity + $1) >= 0
+	RETURNING id, name, quantity, price
+	`, delta, id)
+	if err := row.Scan(&it.ID, &it.Name, &it.Quantity, &it.Price); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errors.New("not found or insufficient stock")
+		}
+		return nil, err
 	}
-	if it.Quantity+delta < 0 {
-		return nil, errors.New("insufficient stock")
-	}
-	it.Quantity += delta
-	return it, nil
+	return &it, nil
 }

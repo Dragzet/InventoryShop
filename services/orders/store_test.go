@@ -17,7 +17,7 @@ func almostEqualFloat(a, b float64) bool {
 }
 
 func TestOrderStore_CreateGetList(t *testing.T) {
-	s := NewOrderStore()
+	s := NewOrderStoreInMemory()
 	items := []OrderItem{{ItemID: 1, Name: "apple", Quantity: 2, Price: 1.5}}
 	ord := s.Create(items, 3.0)
 	if ord.ID != 1 {

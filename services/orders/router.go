@@ -16,8 +16,7 @@ import (
 // reserved represents a reserved quantity for rollback
 type reserved struct{ id, qty int }
 
-func NewRouter(invURL string) http.Handler {
-	store := NewOrderStore()
+func NewRouter(store *OrderStore, invURL string) http.Handler {
 	client := &http.Client{Timeout: 5 * time.Second}
 	mux := http.NewServeMux()
 

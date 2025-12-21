@@ -1,5 +1,33 @@
 version: '3.8'
 services:
+  inventory-db:
+    image: postgres:15
+    container_name: inventory-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: inventory
+    volumes:
+      - inventory-data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    networks:
+      - appnet
+
+  orders-db:
+    image: postgres:15
+    container_name: orders-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: orders
+    volumes:
+      - orders-data:/var/lib/postgresql/data
+    ports:
+      - "5434:5432"
+    networks:
+      - appnet
+
   inventory:
     build: ./services/inventory
     image: inventory-service:latest
@@ -8,6 +36,9 @@ services:
       - "8001:8001"
     environment:
       - INVENTORY_PORT=8001
+      - INVENTORY_DATABASE_URL=postgres://postgres:postgres@inventory-db:5432/inventory?sslmode=disable
+    depends_on:
+      - inventory-db
     networks:
       - appnet
 
@@ -17,11 +48,13 @@ services:
     container_name: orders
     depends_on:
       - inventory
+      - orders-db
     ports:
       - "8002:8002"
     environment:
       - ORDERS_PORT=8002
       - INVENTORY_URL=http://inventory:8001
+      - ORDERS_DATABASE_URL=postgres://postgres:postgres@orders-db:5432/orders?sslmode=disable
     networks:
       - appnet
 
@@ -44,9 +77,11 @@ services:
     entrypoint: ["/client"]
     networks:
       - appnet
-    # client runs on demand (use `docker-compose run client ...`)
+
+volumes:
+  inventory-data:
+  orders-data:
 
 networks:
   appnet:
     driver: bridge
-

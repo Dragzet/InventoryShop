@@ -1,9 +1,11 @@
 package main
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestInventory_CreateGetList_UpdateQuantity(t *testing.T) {
-	s := NewInventory()
+	s := NewInventoryInMemory()
 	it1 := s.Create("apple", 10, 1.5)
 	if it1.ID != 1 {
 		t.Fatalf("expected id 1, got %d", it1.ID)
